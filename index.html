@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>ComicFrame</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a0a;--panel:#111;--card:#1a1a1a;--card2:#222;
+  --border:#2d2d2d;--accent:#f5c518;--accent2:#e6b800;
+  --text:#f0f0f0;--muted:#777;--danger:#ff4444;--r:8px;
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+  font-family:'DM Sans',sans-serif;font-size:14px;-webkit-tap-highlight-color:transparent}
+
+/* ── LAYOUT ── */
+.app{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+
+/* Preview section: fills remaining space */
+.preview-section{
+  flex:1;min-height:0;display:flex;align-items:center;justify-content:center;
+  background:var(--bg);position:relative;overflow:hidden;
+}
+#mainCanvas{display:block;touch-action:none;cursor:crosshair;
+  box-shadow:0 4px 40px rgba(0,0,0,.9),0 0 0 1px var(--border)}
+
+/* Bottom control panel */
+.ctrl{
+  flex-shrink:0;background:var(--panel);
+  border-top:1px solid var(--border);overflow-y:auto;
+}
+.ctrl::-webkit-scrollbar{width:3px}
+.ctrl::-webkit-scrollbar-thumb{background:var(--border)}
+
+/* ── TABS ── */
+.tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
+.tab{flex:1;padding:10px 4px;border:none;background:transparent;
+  color:var(--muted);font-size:11px;font-family:'DM Sans',sans-serif;
+  cursor:pointer;transition:all .2s;letter-spacing:.3px;
+  border-bottom:2px solid transparent;position:relative;bottom:-1px}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+
+.tab-content{display:none;padding:12px 14px}
+.tab-content.active{display:block}
+
+/* ── LOGO ── */
+.logo-bar{display:flex;align-items:center;justify-content:space-between;
+  padding:8px 14px 0;flex-shrink:0}
+.logo{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:3px;color:var(--accent)}
+.logo span{font-size:10px;font-family:'DM Sans',sans-serif;color:var(--muted);
+  letter-spacing:0;font-weight:400;margin-left:6px}
+
+/* ── TEMPLATE STRIP ── */
+.tmpl-strip{display:flex;gap:8px;overflow-x:auto;padding:2px 0 4px}
+.tmpl-strip::-webkit-scrollbar{height:3px}
+.tmpl-strip::-webkit-scrollbar-thumb{background:var(--border)}
+.tmpl-card{flex-shrink:0;width:56px;cursor:pointer}
+.tmpl-thumb{width:56px;height:72px;background:var(--card2);border-radius:4px;
+  border:2px solid var(--border);overflow:hidden;transition:border-color .2s}
+.tmpl-card.active .tmpl-thumb{border-color:var(--accent)}
+.tmpl-thumb svg{width:100%;height:100%}
+.tmpl-label{font-size:9px;color:var(--muted);text-align:center;margin-top:4px;line-height:1.2}
+.tmpl-card.active .tmpl-label{color:var(--accent)}
+
+/* ── UPLOAD ── */
+.upload-label{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  border:2px dashed var(--border);border-radius:var(--r);padding:12px;
+  cursor:pointer;color:var(--muted);font-size:13px;transition:all .2s;
+  user-select:none;-webkit-user-select:none
+}
+.upload-label:hover,.upload-label.drag{border-color:var(--accent);color:var(--accent)}
+#fileInput{display:none}
+
+/* Cell upload list (individual mode) */
+.cell-upload-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}
+.cell-slot{
+  border:1.5px dashed var(--border);border-radius:6px;padding:8px 4px;
+  text-align:center;cursor:pointer;font-size:10px;color:var(--muted);
+  transition:all .2s;user-select:none;-webkit-user-select:none
+}
+.cell-slot.has-img{border-color:#444;color:var(--text)}
+.cell-slot.active-sel{border-color:var(--accent);color:var(--accent)}
+.cell-slot img{width:100%;height:36px;object-fit:cover;border-radius:3px;display:block;margin-bottom:3px}
+
+/* ── MODE TOGGLE ── */
+.mode-row{display:flex;background:var(--card);border-radius:var(--r);padding:3px;gap:3px;margin-bottom:10px}
+.mode-btn{flex:1;padding:8px 4px;border:none;border-radius:6px;background:transparent;
+  color:var(--muted);font-size:11px;font-family:'DM Sans',sans-serif;cursor:pointer;
+  transition:all .2s;text-align:center;line-height:1.3}
+.mode-btn.active{background:var(--accent);color:#000;font-weight:600}
+
+/* ── 3-WAY TOGGLE ── */
+.tri{display:flex;background:var(--card);border-radius:var(--r);padding:3px;gap:3px}
+.tri-btn{flex:1;padding:6px 2px;border:none;border-radius:6px;background:transparent;
+  color:var(--muted);font-size:11px;font-family:'DM Sans',sans-serif;cursor:pointer;
+  transition:all .2s;text-align:center}
+.tri-btn.active{background:var(--card2);color:var(--text);box-shadow:inset 0 0 0 1px var(--border)}
+.tri-btn:hover:not(.active){color:var(--text)}
+
+/* ── ZOOM SLIDER ── */
+.zoom-row{display:flex;align-items:center;gap:10px;margin-top:8px}
+.zoom-label{font-size:11px;color:var(--muted);width:30px;flex-shrink:0}
+.zoom-slider{flex:1;-webkit-appearance:none;appearance:none;height:4px;
+  border-radius:2px;background:var(--card2);outline:none;cursor:pointer}
+.zoom-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+  width:18px;height:18px;border-radius:50%;background:var(--accent);cursor:pointer}
+.zoom-slider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;
+  background:var(--accent);cursor:pointer;border:none}
+.zoom-val{font-size:11px;color:var(--muted);width:36px;text-align:right}
+
+/* ── FIELD LABEL ── */
+.fl{font-size:10px;font-weight:500;color:var(--muted);letter-spacing:.4px;
+  text-transform:uppercase;margin-bottom:6px;margin-top:10px}
+.fl:first-child{margin-top:0}
+
+/* ── EXPORT BUTTON ── */
+.btn-export{
+  width:100%;padding:13px;border:none;border-radius:var(--r);
+  background:var(--accent);color:#000;font-family:'Bebas Neue',sans-serif;
+  font-size:17px;letter-spacing:3px;cursor:pointer;transition:all .2s;margin-top:10px
+}
+.btn-export:hover:not(:disabled){background:var(--accent2)}
+.btn-export:disabled{background:var(--card2);color:var(--muted);cursor:not-allowed}
+
+/* ── CELL HIGHLIGHT RING ── */
+.sel-ring{position:absolute;pointer-events:none;border:2px solid var(--accent);
+  border-radius:2px;box-shadow:0 0 0 1px rgba(245,197,24,.3);transition:all .1s}
+
+/* ── DRAG HINT TOAST ── */
+.toast{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
+  white-space:nowrap;font-size:11px;color:var(--muted);
+  background:rgba(10,10,10,.88);padding:5px 14px;border-radius:20px;
+  pointer-events:none;opacity:0;transition:opacity .3s}
+.toast.show{opacity:1}
+
+/* ── EMPTY STATE ── */
+.empty{position:absolute;text-align:center;color:var(--muted);pointer-events:none}
+.empty .icon{font-size:44px;opacity:.12;margin-bottom:10px}
+.empty p{font-size:12px;line-height:1.7}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ════ PREVIEW ════ -->
+  <section class="preview-section" id="previewSection">
+    <div class="empty" id="emptyState">
+      <div class="icon">&#127902;</div>
+      <p>写真をアップロードすると<br>プレビューが表示されます</p>
+    </div>
+    <canvas id="mainCanvas"></canvas>
+    <div class="sel-ring" id="selRing" style="display:none"></div>
+    <div class="toast" id="toast">ドラッグで位置調整 / ピンチで拡大縮小</div>
+  </section>
+
+  <!-- ════ CONTROLS ════ -->
+  <div class="ctrl" id="ctrl">
+
+    <div class="logo-bar">
+      <div class="logo">ComicFrame<span>漫画フォトフレーム</span></div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="t1" onclick="switchTab('t1')">&#128444; テンプレ</button>
+      <button class="tab"        data-tab="t2" onclick="switchTab('t2')">&#128247; 写真</button>
+      <button class="tab"        data-tab="t3" onclick="switchTab('t3')">&#9646; フレーム</button>
+      <button class="tab"        data-tab="t4" onclick="switchTab('t4')">&#11015; 保存</button>
+    </div>
+
+    <!-- TAB 1: Template -->
+    <div class="tab-content active" id="t1">
+      <div class="fl">コマ割りテンプレート</div>
+      <div class="tmpl-strip" id="tmplStrip"></div>
+    </div>
+
+    <!-- TAB 2: Photo / Mode -->
+    <div class="tab-content" id="t2">
+      <div class="fl">配置モード</div>
+      <div class="mode-row">
+        <button class="mode-btn active" id="btnSplit"  onclick="setMode('split')">
+          &#128230; ぶち抜き<br><span style="font-size:9px;opacity:.7">1枚を全コマ貫通</span>
+        </button>
+        <button class="mode-btn" id="btnIndiv" onclick="setMode('individual')">
+          &#128247; 個別配置<br><span style="font-size:9px;opacity:.7">コマごとに別の写真</span>
+        </button>
+      </div>
+
+      <!-- Split mode: single upload -->
+      <div id="uploadSplit">
+        <label class="upload-label" id="uploadZone" for="fileInput">
+          <span style="font-size:18px">&#128194;</span>
+          写真を選択またはドロップ
+        </label>
+      </div>
+
+      <!-- Individual mode: cell slots -->
+      <div id="uploadIndiv" style="display:none">
+        <div class="fl">コマをタップして写真を設定</div>
+        <div class="cell-upload-grid" id="cellSlots"></div>
+      </div>
+
+      <!-- Zoom control for selected cell -->
+      <div id="zoomPanel" style="display:none;margin-top:10px">
+        <div class="fl" id="zoomLabel">ズーム &#8212; コマ1</div>
+        <div class="zoom-row">
+          <span class="zoom-label">&#128269;</span>
+          <input type="range" class="zoom-slider" id="zoomSlider"
+                 min="100" max="500" value="100" step="1"
+                 oninput="onZoomSlider(this.value)">
+          <span class="zoom-val" id="zoomVal">1.0x</span>
+        </div>
+        <button onclick="resetCell()" style="margin-top:6px;padding:5px 10px;border:1px solid var(--border);border-radius:5px;background:transparent;color:var(--muted);font-size:11px;cursor:pointer;">
+          リセット
+        </button>
+      </div>
+    </div>
+
+    <!-- TAB 3: Frame -->
+    <div class="tab-content" id="t3">
+      <div class="fl">枠線の太さ</div>
+      <div class="tri">
+        <button class="tri-btn active" id="bw-thin"  onclick="setBorder('thin')">細い (2px)</button>
+        <button class="tri-btn"        id="bw-mid"   onclick="setBorder('mid')">中 (5px)</button>
+        <button class="tri-btn"        id="bw-thick" onclick="setBorder('thick')">太い (10px)</button>
+      </div>
+      <div class="fl">コマ間の余白（ドブ）</div>
+      <div class="tri">
+        <button class="tri-btn active" id="gap-none" onclick="setGap('none')">なし</button>
+        <button class="tri-btn"        id="gap-mid"  onclick="setGap('mid')">中 (8px)</button>
+        <button class="tri-btn"        id="gap-wide" onclick="setGap('wide')">広い (18px)</button>
+      </div>
+    </div>
+
+    <!-- TAB 4: Export -->
+    <div class="tab-content" id="t4">
+      <div class="fl">書き出し画質</div>
+      <div class="tri">
+        <button class="qual-btn tri-btn active" id="q-std"  onclick="setQuality('std')">
+          SNS用<br><span style="font-size:9px;opacity:.7">1x (高速)</span>
+        </button>
+        <button class="qual-btn tri-btn" id="q-hi" onclick="setQuality('hi')">
+          高画質<br><span style="font-size:9px;opacity:.7">3x (詳細)</span>
+        </button>
+      </div>
+      <button class="btn-export" id="exportBtn" onclick="exportImage()" disabled>
+        &#11015;&#xFE0E; 保存する (PNG)
+      </button>
+      <div style="margin-top:8px;font-size:10px;color:var(--muted);text-align:center">
+        端末のダウンロードフォルダに保存されます
+      </div>
+    </div>
+
+  </div><!-- /ctrl -->
+</div>
+
+<!-- Hidden file inputs -->
+<input type="file" id="fileInput"      accept="image/*">
+<input type="file" id="fileInputCell" accept="image/*">
+
+<script>
+/* =================================================================
+   TEMPLATES
+================================================================= */
+var TEMPLATES = [
+  {
+    id:'manga6', name:'6コマ\n漫画型', aspect:0.68,
+    cells:[
+      {x:0.59,y:0.00,w:0.41,h:0.39},  // 0: top-right  (panel 1)
+      {x:0.37,y:0.00,w:0.22,h:0.39},  // 1: top-center (panel 2)
+      {x:0.00,y:0.00,w:0.37,h:0.39},  // 2: top-left   (panel 3)
+      {x:0.00,y:0.39,w:1.00,h:0.21},  // 3: middle     (panel 4)
+      {x:0.50,y:0.60,w:0.50,h:0.40},  // 4: btm-right  (panel 5)
+      {x:0.00,y:0.60,w:0.50,h:0.40},  // 5: btm-left   (panel 6)
+    ],
+    svgPath:function(){
+      return '<rect width="60" height="88" fill="#1a1a1a"/>'
+        +'<rect x="3"  y="3"  width="22" height="31" fill="#444" rx="1"/>'  // 3
+        +'<rect x="27" y="3"  width="13" height="31" fill="#444" rx="1"/>'  // 2
+        +'<rect x="42" y="3"  width="15" height="31" fill="#444" rx="1"/>'  // 1
+        +'<rect x="3"  y="36" width="54" height="18" fill="#444" rx="1"/>'  // 4
+        +'<rect x="3"  y="56" width="25" height="29" fill="#444" rx="1"/>'  // 6
+        +'<rect x="30" y="56" width="27" height="29" fill="#444" rx="1"/>'; // 5
+    }
+  },
+  {
+    id:'4koma', name:'4コマ型', aspect:0.60,
+    cells:[
+      {x:0,y:0.00,w:1,h:0.25},{x:0,y:0.25,w:1,h:0.25},
+      {x:0,y:0.50,w:1,h:0.25},{x:0,y:0.75,w:1,h:0.25}
+    ],
+    svgPath:function(){
+      return '<rect width="60" height="100" fill="#1a1a1a"/>'
+        +'<rect x="3" y="3"  width="54" height="21" fill="#444" rx="1"/>'
+        +'<rect x="3" y="27" width="54" height="21" fill="#444" rx="1"/>'
+        +'<rect x="3" y="51" width="54" height="21" fill="#444" rx="1"/>'
+        +'<rect x="3" y="75" width="54" height="22" fill="#444" rx="1"/>';
+    }
+  },
+  {
+    id:'dramatic', name:'ドラマ型', aspect:0.80,
+    cells:[
+      {x:0,y:0,w:1,h:0.5},{x:0,y:0.5,w:0.5,h:0.5},{x:0.5,y:0.5,w:0.5,h:0.5}
+    ],
+    svgPath:function(){
+      return '<rect width="60" height="75" fill="#1a1a1a"/>'
+        +'<rect x="3" y="3"  width="54" height="34" fill="#444" rx="1"/>'
+        +'<rect x="3" y="40" width="25" height="32" fill="#444" rx="1"/>'
+        +'<rect x="32" y="40" width="25" height="32" fill="#444" rx="1"/>';
+    }
+  },
+  {
+    id:'magazine', name:'表紙風', aspect:0.75,
+    cells:[
+      {x:0,y:0,w:1,h:1},{x:0.60,y:0.68,w:0.37,h:0.29}
+    ],
+    svgPath:function(){
+      return '<rect width="60" height="80" fill="#1a1a1a"/>'
+        +'<rect x="3" y="3" width="54" height="74" fill="#444" rx="1"/>'
+        +'<rect x="36" y="53" width="20" height="22" fill="#555" stroke="#f5c518" stroke-width="1.5" rx="1"/>';
+    }
+  },
+  {
+    id:'spread', name:'見開き型', aspect:1.40,
+    cells:[
+      {x:0,y:0,w:0.5,h:1},{x:0.5,y:0,w:0.5,h:1}
+    ],
+    svgPath:function(){
+      return '<rect width="80" height="57" fill="#1a1a1a"/>'
+        +'<rect x="3" y="3" width="35" height="51" fill="#444" rx="1"/>'
+        +'<rect x="42" y="3" width="35" height="51" fill="#444" rx="1"/>';
+    }
+  }
+];
+
+/* =================================================================
+   STATE
+================================================================= */
+var S = {
+  tmplIdx:   0,
+  mode:      'split',      // 'split' | 'individual'
+  images:    [],           // HTMLImageElement[], index = cell index in individual mode
+  splitImg:  null,         // HTMLImageElement for split mode
+
+  // Per-cell transform (individual mode) or global (split mode)
+  // Scale: 1.0 = fill cell at minimum (cover), >1 zoomed in
+  cellState: [],           // [{ox,oy,scale}] length = template.cells.length
+
+  activeCell:-1,           // selected cell index (-1 = none)
+  pendingCellUpload:-1,    // which cell is waiting for file input
+
+  borderKey: 'thin',
+  gapKey:    'none',
+  quality:   'std',
+
+  // Touch state
+  tMode:     null,         // 'pan' | 'pinch' | null
+  tStartPos: null,
+  tStartOff: null,
+  tStartScale: null,
+  tStartDist: null,
+
+  hintShown: false
+};
+
+var BORDER_MAP  = {thin:2, mid:5, thick:10};
+var GAP_MAP     = {none:0, mid:8, wide:18};
+var QUALITY_MAP = {std:1,  hi:3};
+var BASE_H      = 900;
+
+/* =================================================================
+   DOM REFS
+================================================================= */
+var canvas   = document.getElementById('mainCanvas');
+var ctx      = canvas.getContext('2d');
+var previewSection = document.getElementById('previewSection');
+var emptyState = document.getElementById('emptyState');
+var selRing  = document.getElementById('selRing');
+var toast    = document.getElementById('toast');
+var zoomPanel   = document.getElementById('zoomPanel');
+var zoomSlider  = document.getElementById('zoomSlider');
+var zoomVal     = document.getElementById('zoomVal');
+var exportBtn   = document.getElementById('exportBtn');
+var fileInput     = document.getElementById('fileInput');
+var fileInputCell = document.getElementById('fileInputCell');
+var ctrl = document.getElementById('ctrl');
+
+/* =================================================================
+   INIT
+================================================================= */
+document.addEventListener('dragover', function(e){e.preventDefault();});
+document.addEventListener('drop',     function(e){e.preventDefault();});
+
+buildTemplateStrip();
+initCellState();
+syncCtrlHeight();
+render();
+
+window.addEventListener('resize', function(){
+  syncCtrlHeight();
+  fitCanvas();
+});
+
+/* =================================================================
+   TEMPLATE STRIP
+================================================================= */
+function buildTemplateStrip(){
+  var strip = document.getElementById('tmplStrip');
+  strip.innerHTML = '';
+  TEMPLATES.forEach(function(t,i){
+    var card = document.createElement('div');
+    card.className = 'tmpl-card' + (i===0?' active':'');
+    card.id = 'tc'+i;
+    card.onclick = function(){ setTemplate(i); };
+
+    var aspect = t.aspect;
+    var vw = aspect > 1 ? 80 : 56;
+    var vh = aspect > 1 ? Math.round(vw/aspect) : Math.round(vw/aspect);
+    // clamp thumb height
+    if(vh > 72) vh = 72;
+
+    card.innerHTML =
+      '<div class="tmpl-thumb" style="width:'+vw+'px;height:'+vh+'px">'
+      +'<svg viewBox="0 0 '+(aspect>1?'80 57':'60 '+(Math.round(60/aspect)))
+      +'" fill="none">'+t.svgPath()+'</svg></div>'
+      +'<div class="tmpl-label">'+t.name+'</div>';
+    strip.appendChild(card);
+  });
+}
+
+/* =================================================================
+   CELL STATE
+================================================================= */
+function initCellState(preserve){
+  var tmpl = TEMPLATES[S.tmplIdx];
+  var n = tmpl.cells.length;
+  var old = S.cellState.slice();
+  S.cellState = [];
+  for(var i=0;i<n;i++){
+    if(preserve && old[i]){
+      S.cellState.push(old[i]);
+    } else {
+      S.cellState.push({ox:0,oy:0,scale:1.0});
+    }
+  }
+  if(S.mode==='individual'){
+    // Trim images array to cell count
+    while(S.images.length < n) S.images.push(null);
+  }
+}
+
+function getCellState(i){
+  return S.cellState[i] || {ox:0,oy:0,scale:1.0};
+}
+
+/* =================================================================
+   CANVAS SIZING
+================================================================= */
+function getCanvasDims(){
+  var tmpl = TEMPLATES[S.tmplIdx];
+  var h = BASE_H;
+  var w = Math.round(h * tmpl.aspect);
+  return {w:w, h:h};
+}
+
+function fitCanvas(){
+  var dims = getCanvasDims();
+  var avW  = previewSection.clientWidth  - 16;
+  var avH  = previewSection.clientHeight - 16;
+  if(avW<=0||avH<=0) return;
+  var sc = Math.min(avW/dims.w, avH/dims.h, 1);
+  canvas.style.width  = Math.round(dims.w*sc)+'px';
+  canvas.style.height = Math.round(dims.h*sc)+'px';
+  updateSelRing();
+}
+
+function syncCtrlHeight(){
+  // Mobile: ctrl gets ~36% of screen, preview gets rest
+  // Desktop: ctrl max 260px
+  var totalH = window.innerHeight;
+  var ctrlH  = Math.min(Math.max(Math.round(totalH*0.36), 220), 280);
+  ctrl.style.height = ctrlH + 'px';
+}
+
+/* =================================================================
+   RENDER
+================================================================= */
+function getRenderedCells(cW, cH, bw, gap){
+  var tmpl = TEMPLATES[S.tmplIdx];
+  return tmpl.cells.map(function(nc, i){
+    var rx=nc.x*cW, ry=nc.y*cH, rw=nc.w*cW, rh=nc.h*cH;
+    var isOverlay = tmpl.overlay ? tmpl.overlay[i] : false;
+    if(!isOverlay && gap>0){
+      var atL=nc.x<0.01, atT=nc.y<0.01, atR=nc.x+nc.w>0.99, atB=nc.y+nc.h>0.99;
+      var gl=atL?0:gap/2, gt=atT?0:gap/2, gr=atR?0:gap/2, gb=atB?0:gap/2;
+      rx+=gl; ry+=gt; rw-=(gl+gr); rh-=(gt+gb);
+    }
+    var ix=rx+bw, iy=ry+bw, iw=rw-2*bw, ih=rh-2*bw;
+    return {rx:rx,ry:ry,rw:rw,rh:rh,ix:ix,iy:iy,iw:iw,ih:ih,isOverlay:isOverlay};
+  });
+}
+
+function drawCover(tCtx, img, cx, cy, cw, ch, ox, oy, userScale){
+  if(!img||cw<=0||ch<=0) return;
+  var ia=img.naturalWidth/img.naturalHeight, ca=cw/ch;
+  var bw,bh;
+  if(ia>ca){bh=ch;bw=ch*ia;}else{bw=cw;bh=cw/ia;}
+  var dw=bw*userScale, dh=bh*userScale;
+  var mox=Math.max(0,(dw-cw)/2), moy=Math.max(0,(dh-ch)/2);
+  var ox2=Math.max(-mox,Math.min(mox,ox));
+  var oy2=Math.max(-moy,Math.min(moy,oy));
+  tCtx.drawImage(img, cx+cw/2-dw/2+ox2, cy+ch/2-dh/2+oy2, dw, dh);
+}
+
+function renderToCtx(tCanvas, tCtx, scale){
+  var dims = getCanvasDims();
+  var cW=dims.w*scale, cH=dims.h*scale;
+  var bw=BORDER_MAP[S.borderKey]*scale;
+  var gap=GAP_MAP[S.gapKey]*scale;
+
+  tCanvas.width=cW;
+  tCanvas.height=cH;
+
+  tCtx.fillStyle='#000';
+  tCtx.fillRect(0,0,cW,cH);
+
+  var cells = getRenderedCells(cW,cH,bw,gap);
+
+  if(S.mode==='split'){
+    var img=S.splitImg;
+    if(img){
+      // Draw each cell showing portion of global image
+      // global image: cover canvas, then apply global transform
+      var ia=img.naturalWidth/img.naturalHeight, ca=cW/cH;
+      var bw2,bh2;
+      if(ia>ca){bh2=cH;bw2=cH*ia;}else{bw2=cW;bh2=cW/ia;}
+      var gst=getCellState(-1); // we reuse cell 0 state for split global
+      // actually use splitState
+      var gState=S.splitState||{ox:0,oy:0,scale:1.0};
+      var dw2=bw2*gState.scale, dh2=bh2*gState.scale;
+      var mox2=Math.max(0,(dw2-cW)/2), moy2=Math.max(0,(dh2-cH)/2);
+      var gox=Math.max(-mox2,Math.min(mox2,gState.ox*scale));
+      var goy=Math.max(-moy2,Math.min(moy2,gState.oy*scale));
+      var imgX=cW/2-dw2/2+gox, imgY=cH/2-dh2/2+goy;
+
+      cells.forEach(function(cell){
+        if(cell.iw<=0||cell.ih<=0) return;
+        tCtx.save();
+        tCtx.beginPath();
+        tCtx.rect(cell.ix,cell.iy,cell.iw,cell.ih);
+        tCtx.clip();
+        tCtx.drawImage(img,imgX,imgY,dw2,dh2);
+        tCtx.restore();
+        if(bw>0){
+          tCtx.strokeStyle='#000';tCtx.lineWidth=bw;
+          tCtx.strokeRect(cell.rx+bw/2,cell.ry+bw/2,cell.rw-bw,cell.rh-bw);
+        }
+      });
+    }
+  } else {
+    // Individual
+    cells.forEach(function(cell,i){
+      var img=S.images[i];
+      if(!img||cell.iw<=0||cell.ih<=0){
+        // Draw placeholder
+        tCtx.fillStyle='#1a1a1a';
+        tCtx.fillRect(cell.ix,cell.iy,cell.iw,cell.ih);
+        tCtx.fillStyle='#333';
+        tCtx.font='bold '+(Math.min(cell.iw,cell.ih)*0.15)+'px DM Sans';
+        tCtx.textAlign='center';tCtx.textBaseline='middle';
+        tCtx.fillText((i+1).toString(),cell.ix+cell.iw/2,cell.iy+cell.ih/2);
+        if(bw>0){tCtx.strokeStyle='#000';tCtx.lineWidth=bw;
+          tCtx.strokeRect(cell.rx+bw/2,cell.ry+bw/2,cell.rw-bw,cell.rh-bw);}
+        return;
+      }
+      var cs=getCellState(i);
+      tCtx.save();
+      tCtx.beginPath();
+      tCtx.rect(cell.ix,cell.iy,cell.iw,cell.ih);
+      tCtx.clip();
+      drawCover(tCtx,img,cell.ix,cell.iy,cell.iw,cell.ih,cs.ox*scale,cs.oy*scale,cs.scale);
+      tCtx.restore();
+      if(bw>0){
+        tCtx.strokeStyle='#000';tCtx.lineWidth=bw;
+        tCtx.strokeRect(cell.rx+bw/2,cell.ry+bw/2,cell.rw-bw,cell.rh-bw);
+      }
+    });
+  }
+}
+
+function render(){
+  renderToCtx(canvas,ctx,1);
+  fitCanvas();
+  updateExportBtn();
+}
+
+/* =================================================================
+   COORDINATE HELPERS
+================================================================= */
+function toCanvas(clientX,clientY){
+  var r=canvas.getBoundingClientRect();
+  if(r.width===0) return {x:0,y:0};
+  return {
+    x:(clientX-r.left)*canvas.width/r.width,
+    y:(clientY-r.top)*canvas.height/r.height
+  };
+}
+
+function getCellAt(cx,cy){
+  var dims=getCanvasDims();
+  var tmpl=TEMPLATES[S.tmplIdx];
+  var bw=BORDER_MAP[S.borderKey];
+  var gap=GAP_MAP[S.gapKey];
+  var cells=getRenderedCells(dims.w,dims.h,bw,gap);
+  for(var i=cells.length-1;i>=0;i--){
+    var c=cells[i];
+    if(cx>=c.rx&&cx<=c.rx+c.rw&&cy>=c.ry&&cy<=c.ry+c.rh) return i;
+  }
+  return -1;
+}
+
+function getCellPixelRect(cellIdx){
+  var dims=getCanvasDims();
+  var bw=BORDER_MAP[S.borderKey];
+  var gap=GAP_MAP[S.gapKey];
+  var cells=getRenderedCells(dims.w,dims.h,bw,gap);
+  if(!cells[cellIdx]) return null;
+  return cells[cellIdx];
+}
+
+/* =================================================================
+   SELECTION RING
+================================================================= */
+function updateSelRing(){
+  if(S.activeCell<0||S.mode!=='individual'){selRing.style.display='none';return;}
+  var c=getCellPixelRect(S.activeCell);
+  if(!c){selRing.style.display='none';return;}
+  var rect=canvas.getBoundingClientRect();
+  var pr=previewSection.getBoundingClientRect();
+  if(rect.width===0){selRing.style.display='none';return;}
+  var scX=rect.width/canvas.width, scY=rect.height/canvas.height;
+  selRing.style.display='block';
+  selRing.style.left   = (rect.left-pr.left+c.ix*scX-2)+'px';
+  selRing.style.top    = (rect.top -pr.top +c.iy*scY-2)+'px';
+  selRing.style.width  = (c.iw*scX+4)+'px';
+  selRing.style.height = (c.ih*scY+4)+'px';
+}
+
+/* =================================================================
+   TOUCH & MOUSE EVENTS
+================================================================= */
+function touchDist(touches){
+  var dx=touches[0].clientX-touches[1].clientX;
+  var dy=touches[0].clientY-touches[1].clientY;
+  return Math.sqrt(dx*dx+dy*dy);
+}
+
+canvas.addEventListener('touchstart',function(e){
+  e.preventDefault();
+  var pt=toCanvas(e.touches[0].clientX,e.touches[0].clientY);
+
+  if(S.mode==='split'){
+    if(!S.splitImg) return;
+    if(!S.splitState) S.splitState={ox:0,oy:0,scale:1.0};
+    if(e.touches.length===2){
+      S.tMode='pinch';
+      S.tStartDist=touchDist(e.touches);
+      S.tStartScale=S.splitState.scale;
+    } else {
+      S.tMode='pan';
+      S.tStartPos={x:e.touches[0].clientX,y:e.touches[0].clientY};
+      S.tStartOff={x:S.splitState.ox,y:S.splitState.oy};
+    }
+  } else {
+    // Individual mode
+    var ci=getCellAt(pt.x,pt.y);
+    if(ci<0) return;
+    setActiveCell(ci);
+    if(e.touches.length===2){
+      S.tMode='pinch';
+      S.tStartDist=touchDist(e.touches);
+      S.tStartScale=getCellState(ci).scale;
+      S.activeCell=ci;
+    } else {
+      S.tMode='pan';
+      S.tStartPos={x:e.touches[0].clientX,y:e.touches[0].clientY};
+      S.tStartOff={x:getCellState(ci).ox,y:getCellState(ci).oy};
+    }
+  }
+  if(!S.hintShown&&S.mode==='individual'&&S.images[ci]){
+    S.hintShown=true; showToast();
+  }
+},{passive:false});
+
+canvas.addEventListener('touchmove',function(e){
+  e.preventDefault();
+  if(!S.tMode) return;
+
+  if(S.mode==='split'){
+    if(!S.splitState) return;
+    if(S.tMode==='pinch'&&e.touches.length===2){
+      var d=touchDist(e.touches);
+      S.splitState.scale=Math.max(1.0,Math.min(5.0,S.tStartScale*(d/S.tStartDist)));
+    } else if(S.tMode==='pan'){
+      var r=canvas.getBoundingClientRect();
+      var sc=canvas.width/r.width;
+      S.splitState.ox=S.tStartOff.x+(e.touches[0].clientX-S.tStartPos.x)/sc*1;
+      S.splitState.oy=S.tStartOff.y+(e.touches[0].clientY-S.tStartPos.y)/sc*1;
+    }
+  } else {
+    var ci=S.activeCell;
+    if(ci<0) return;
+    var cs=S.cellState[ci];
+    if(!cs) return;
+    if(S.tMode==='pinch'&&e.touches.length===2){
+      var d2=touchDist(e.touches);
+      cs.scale=Math.max(1.0,Math.min(5.0,S.tStartScale*(d2/S.tStartDist)));
+      updateZoomUI(ci);
+    } else if(S.tMode==='pan'){
+      var r2=canvas.getBoundingClientRect();
+      var sc2=canvas.width/r2.width;
+      cs.ox=S.tStartOff.x+(e.touches[0].clientX-S.tStartPos.x)/sc2;
+      cs.oy=S.tStartOff.y+(e.touches[0].clientY-S.tStartPos.y)/sc2;
+    }
+  }
+  render();
+},{passive:false});
+
+canvas.addEventListener('touchend',function(e){
+  e.preventDefault();
+  if(e.touches.length===0) S.tMode=null;
+},{passive:false});
+
+/* Mouse support for desktop */
+var mouseDown=false, mouseCellIdx=-1, mouseStartPos=null, mouseStartOff=null;
+
+canvas.addEventListener('mousedown',function(e){
+  var pt=toCanvas(e.clientX,e.clientY);
+  if(S.mode==='split'){
+    if(!S.splitImg) return;
+    if(!S.splitState) S.splitState={ox:0,oy:0,scale:1.0};
+    mouseDown=true; mouseCellIdx=-99;
+    mouseStartPos={x:e.clientX,y:e.clientY};
+    mouseStartOff={x:S.splitState.ox,y:S.splitState.oy};
+  } else {
+    var ci=getCellAt(pt.x,pt.y);
+    if(ci<0){setActiveCell(-1);return;}
+    setActiveCell(ci);
+    mouseDown=true; mouseCellIdx=ci;
+    mouseStartPos={x:e.clientX,y:e.clientY};
+    mouseStartOff={x:S.cellState[ci].ox,y:S.cellState[ci].oy};
+  }
+  canvas.style.cursor='grabbing';
+  e.preventDefault();
+});
+
+window.addEventListener('mousemove',function(e){
+  if(!mouseDown) return;
+  var r=canvas.getBoundingClientRect();
+  var sc=canvas.width/r.width;
+  var dx=(e.clientX-mouseStartPos.x)/sc;
+  var dy=(e.clientY-mouseStartPos.y)/sc;
+  if(mouseCellIdx===-99){
+    S.splitState.ox=mouseStartOff.x+dx;
+    S.splitState.oy=mouseStartOff.y+dy;
+  } else if(mouseCellIdx>=0&&S.cellState[mouseCellIdx]){
+    S.cellState[mouseCellIdx].ox=mouseStartOff.x+dx;
+    S.cellState[mouseCellIdx].oy=mouseStartOff.y+dy;
+  }
+  render();
+});
+
+window.addEventListener('mouseup',function(){
+  mouseDown=false;
+  canvas.style.cursor='crosshair';
+});
+
+canvas.addEventListener('mousemove',function(e){
+  if(mouseDown) return;
+  var pt=toCanvas(e.clientX,e.clientY);
+  var ci=getCellAt(pt.x,pt.y);
+  canvas.style.cursor=(ci>=0)?'grab':'crosshair';
+});
+
+/* =================================================================
+   ACTIVE CELL
+================================================================= */
+function setActiveCell(i){
+  S.activeCell=i;
+  updateSelRing();
+  updateZoomPanel();
+  refreshCellSlots();
+}
+
+function updateZoomPanel(){
+  if(S.activeCell<0||S.mode!=='individual'){
+    zoomPanel.style.display='none';
+    return;
+  }
+  var ci=S.activeCell;
+  document.getElementById('zoomLabel').textContent='ズーム - コマ'+(ci+1);
+  var cs=getCellState(ci);
+  var pct=Math.round(cs.scale*100);
+  zoomSlider.value=pct;
+  zoomVal.textContent=cs.scale.toFixed(1)+'x';
+  zoomPanel.style.display='block';
+}
+
+function updateZoomUI(ci){
+  if(S.activeCell!==ci) return;
+  var cs=getCellState(ci);
+  zoomSlider.value=Math.round(cs.scale*100);
+  zoomVal.textContent=cs.scale.toFixed(1)+'x';
+}
+
+function onZoomSlider(val){
+  var ci=S.activeCell;
+  if(ci<0||!S.cellState[ci]) return;
+  S.cellState[ci].scale=parseInt(val)/100;
+  zoomVal.textContent=S.cellState[ci].scale.toFixed(1)+'x';
+  render();
+}
+
+function resetCell(){
+  var ci=S.activeCell;
+  if(S.mode==='split'){
+    S.splitState={ox:0,oy:0,scale:1.0};
+  } else if(ci>=0&&S.cellState[ci]){
+    S.cellState[ci]={ox:0,oy:0,scale:1.0};
+    updateZoomUI(ci);
+  }
+  render();
+}
+
+/* =================================================================
+   FILE UPLOAD
+================================================================= */
+var uploadZone = document.getElementById('uploadZone');
+
+uploadZone.addEventListener('dragover',function(e){e.preventDefault();e.stopPropagation();uploadZone.classList.add('drag');});
+uploadZone.addEventListener('dragleave',function(e){e.stopPropagation();uploadZone.classList.remove('drag');});
+uploadZone.addEventListener('drop',function(e){
+  e.preventDefault();e.stopPropagation();
+  uploadZone.classList.remove('drag');
+  if(e.dataTransfer&&e.dataTransfer.files.length>0) handleSplitFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change',function(){
+  if(fileInput.files&&fileInput.files.length>0) handleSplitFile(fileInput.files[0]);
+});
+fileInputCell.addEventListener('change',function(){
+  if(fileInputCell.files&&fileInputCell.files.length>0&&S.pendingCellUpload>=0){
+    handleCellFile(fileInputCell.files[0], S.pendingCellUpload);
+  }
+});
+
+function handleSplitFile(file){
+  if(!file.type.startsWith('image/')) return;
+  loadImg(file,function(img){
+    S.splitImg=img;
+    S.splitState={ox:0,oy:0,scale:1.0};
+    emptyState.style.display='none';
+    updateExportBtn();
+    requestAnimationFrame(function(){render();});
+    fileInput.value='';
+  });
+}
+
+function handleCellFile(file, ci){
+  if(!file.type.startsWith('image/')) return;
+  loadImg(file,function(img){
+    S.images[ci]=img;
+    S.cellState[ci]={ox:0,oy:0,scale:1.0};
+    setActiveCell(ci);
+    refreshCellSlots();
+    var hasAny=S.images.some(function(x){return x!==null&&x!==undefined;});
+    if(hasAny) emptyState.style.display='none';
+    updateExportBtn();
+    requestAnimationFrame(function(){render();});
+    fileInputCell.value='';
+  });
+}
+
+function loadImg(file,cb){
+  var img=new Image();
+  img.onload=function(){cb(img);};
+  img.onerror=function(){console.warn('ComicFrame: load error',file.name);};
+  img.src=URL.createObjectURL(file);
+}
+
+/* =================================================================
+   CELL SLOTS (individual mode)
+================================================================= */
+function refreshCellSlots(){
+  var grid=document.getElementById('cellSlots');
+  grid.innerHTML='';
+  var n=TEMPLATES[S.tmplIdx].cells.length;
+  for(var i=0;i<n;i++){
+    (function(ci){
+      var slot=document.createElement('div');
+      slot.className='cell-slot'+(ci===S.activeCell?' active-sel':'')+(S.images[ci]?' has-img':'');
+      var img=S.images[ci];
+      var content='';
+      if(img){
+        content='<img src="'+img.src+'" alt="cell'+ci+'">';
+      }
+      content+='コマ'+(ci+1);
+      slot.innerHTML=content;
+      slot.onclick=function(){
+        S.pendingCellUpload=ci;
+        setActiveCell(ci);
+        fileInputCell.click();
+      };
+      grid.appendChild(slot);
+    })(i);
+  }
+  updateZoomPanel();
+}
+
+/* =================================================================
+   SETTINGS
+================================================================= */
+function setTemplate(idx){
+  S.tmplIdx=idx;
+  document.querySelectorAll('.tmpl-card').forEach(function(c,i){
+    c.classList.toggle('active',i===idx);
+  });
+  initCellState(false);
+  S.activeCell=-1;
+  setActiveCell(-1);
+  if(S.mode==='individual') refreshCellSlots();
+  requestAnimationFrame(function(){render();});
+}
+
+function setMode(m){
+  S.mode=m;
+  document.getElementById('btnSplit').classList.toggle('active',m==='split');
+  document.getElementById('btnIndiv').classList.toggle('active',m==='individual');
+  document.getElementById('uploadSplit').style.display=m==='split'?'block':'none';
+  document.getElementById('uploadIndiv').style.display=m==='individual'?'block':'none';
+  S.activeCell=-1;
+  updateSelRing();
+  if(m==='individual'){
+    initCellState(true);
+    refreshCellSlots();
+  }
+  updateExportBtn();
+  requestAnimationFrame(function(){render();});
+}
+
+function setBorder(k){
+  S.borderKey=k;
+  ['thin','mid','thick'].forEach(function(id){
+    document.getElementById('bw-'+id).classList.toggle('active',id===k);
+  });
+  requestAnimationFrame(function(){render();});
+}
+
+function setGap(k){
+  S.gapKey=k;
+  ['none','mid','wide'].forEach(function(id){
+    document.getElementById('gap-'+id).classList.toggle('active',id===k);
+  });
+  requestAnimationFrame(function(){render();});
+}
+
+function setQuality(q){
+  S.quality=q;
+  ['std','hi'].forEach(function(id){
+    document.getElementById('q-'+id).classList.toggle('active',id===q);
+  });
+}
+
+function updateExportBtn(){
+  var hasContent=false;
+  if(S.mode==='split') hasContent=!!S.splitImg;
+  else hasContent=S.images.some(function(x){return x!==null&&x!==undefined;});
+  exportBtn.disabled=!hasContent;
+}
+
+/* =================================================================
+   TABS
+================================================================= */
+function switchTab(id){
+  document.querySelectorAll('.tab').forEach(function(t){
+    t.classList.toggle('active',t.getAttribute('data-tab')===id);
+  });
+  document.querySelectorAll('.tab-content').forEach(function(c){
+    c.classList.toggle('active',c.id===id);
+  });
+}
+
+/* =================================================================
+   TOAST
+================================================================= */
+var toastTimer=null;
+function showToast(){
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(function(){toast.classList.remove('show');},3000);
+}
+
+/* =================================================================
+   EXPORT
+================================================================= */
+function exportImage(){
+  var scale=QUALITY_MAP[S.quality];
+  var off=document.createElement('canvas');
+  var oCtx=off.getContext('2d');
+  renderToCtx(off,oCtx,scale);
+  var link=document.createElement('a');
+  link.download='comicframe_'+Date.now()+'.png';
+  link.href=off.toDataURL('image/png');
+  link.click();
+}
+
+/* =================================================================
+   INITIAL CANVAS RENDER
+================================================================= */
+render();
+</script>
+</body>
+</html>
